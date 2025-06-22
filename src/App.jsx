@@ -173,11 +173,12 @@ return (
                       fontSize: '1rem',
                       cursor: selectedAnswer ? 'default' : 'pointer',
                       backgroundColor: bgColor,
+                      color: '#000',
                       border: '1px solid #ccc',
                       borderRadius: '5px'
                     }}
                   >
-                    
+
                     {opt["English Meaning"]}
                   </button>
                 );
