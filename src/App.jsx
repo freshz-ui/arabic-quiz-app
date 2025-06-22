@@ -10,6 +10,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('quiz');
   const [lastQuestionId, setLastQuestionId] = useState(null);
+  const [selectedAnswer, setSelectedAnswer] = useState(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
@@ -89,87 +90,106 @@ const fetchQuestion = async () => {
 };
 
 
-  const handleAnswer = async (selected) => {
-    const isCorrect = selected === question["English Meaning"];
-    alert(isCorrect ? '✅ Correct!' : '❌ Incorrect');
+const handleAnswer = async (selected) => {
+  setSelectedAnswer(selected);
 
-    const currentEase = question.progress?.ease ?? 1;
-    const newEase = isCorrect ? Math.min(currentEase + 1, 5) : 1;
-    const prevCorrect = question.progress?.correct_count ?? 0;
-    const prevIncorrect = question.progress?.incorrect_count ?? 0;
+  const isCorrect = selected === question["English Meaning"];
+  const currentEase = question.progress?.ease ?? 1;
+  const newEase = isCorrect ? Math.min(currentEase + 1, 5) : 1;
+  const prevCorrect = question.progress?.correct_count ?? 0;
+  const prevIncorrect = question.progress?.incorrect_count ?? 0;
 
-    const { error } = await supabase.from('user_progress').upsert({
-      user_id: user.id,
-      english_id: question.id,
-      ease: newEase,
-      last_seen: new Date().toISOString(),
-      seen: true,
-      correct_count: isCorrect ? prevCorrect + 1 : prevCorrect,
-      incorrect_count: isCorrect ? prevIncorrect : prevIncorrect + 1
-    });
+  await supabase.from('user_progress').upsert({
+    user_id: user.id,
+    english_id: question.id,
+    ease: newEase,
+    last_seen: new Date().toISOString(),
+    seen: true,
+    correct_count: isCorrect ? prevCorrect + 1 : prevCorrect,
+    incorrect_count: isCorrect ? prevIncorrect : prevIncorrect + 1
+  });
 
-    if (error) {
-      console.error('Error updating progress:', error);
-    }
-
+  // Wait a moment, then fetch the next question
+  setTimeout(() => {
+    setSelectedAnswer(null);
     fetchQuestion();
-  };
+  }, 1200);
+};
 
-  return (
-    <div className="container">
-      <h1>Arabic Vocab</h1>
 
-      {!user ? (
-        <Auth onAuth={setUser} />
-      ) : (
-        <>
-          <nav style={{ marginBottom: '1rem' }}>
-            <button onClick={() => setView('quiz')} style={{ marginRight: '1rem' }}>
-              Quiz
-            </button>
-            <button onClick={() => setView('progress')}>Progress</button>
-          </nav>
+return (
+  <div className="container" style={{ maxWidth: '700px', margin: 'auto', padding: '2rem', fontFamily: 'sans-serif' }}>
+    <h1>Arabic Vocab</h1>
 
-          {view === 'progress' ? (
-            <Progress user={user} />
-          ) : loading ? (
-            <p>Loading...</p>
-          ) : (
-            <>
-              <h2>What is the meaning of:</h2>
-              <ul style={{ fontSize: '1.25rem', lineHeight: '1.6' }}>
-                {question.arabic_forms.map((form, i) => (
-                  <li key={i}>
-                    <strong>{form.form_type}:</strong> {form.form_value}
-                  </li>
-                ))}
-              </ul>
+    {!user ? (
+      <Auth onAuth={setUser} />
+    ) : (
+      <>
+        <nav style={{ marginBottom: '1rem' }}>
+          <button onClick={() => setView('quiz')} style={{ marginRight: '1rem' }}>
+            Quiz
+          </button>
+          <button onClick={() => setView('progress')}>Progress</button>
+        </nav>
 
-              <div style={{ marginTop: '1rem' }}>
-                {options.map((opt, i) => (
+        {view === 'progress' ? (
+          <Progress user={user} />
+        ) : loading ? (
+          <p>Loading...</p>
+        ) : (
+          <>
+            <h2>What is the meaning of:</h2>
+            <ul style={{ fontSize: '1.25rem', lineHeight: '1.6' }}>
+              {question.arabic_forms.map((form, i) => (
+                <li key={i}>
+                  <strong>{form.form_type}:</strong> {form.form_value}
+                </li>
+              ))}
+            </ul>
+
+            <div style={{ marginTop: '1rem' }}>
+              {options.map((opt, i) => {
+                const isCorrect = opt["English Meaning"] === question["English Meaning"];
+                const isSelected = selectedAnswer === opt["English Meaning"];
+                const bgColor =
+                  selectedAnswer
+                    ? isCorrect
+                      ? '#2ecc71' // green
+                      : isSelected
+                        ? '#e74c3c' // red
+                        : '#ddd'
+                    : '#fff';
+
+                return (
                   <button
                     key={i}
                     onClick={() => handleAnswer(opt["English Meaning"])}
+                    disabled={!!selectedAnswer}
                     style={{
                       display: 'block',
                       margin: '0.5rem 0',
                       padding: '0.75rem 1rem',
                       width: '100%',
                       fontSize: '1rem',
-                      cursor: 'pointer',
+                      cursor: selectedAnswer ? 'default' : 'pointer',
+                      backgroundColor: bgColor,
+                      border: '1px solid #ccc',
+                      borderRadius: '5px'
                     }}
                   >
-
+                    
                     {opt["English Meaning"]}
                   </button>
-                ))}
-              </div>
-            </>
-          )}
-        </>
-      )}
-    </div>
-  );
+                );
+              })}
+            </div>
+          </>
+        )}
+      </>
+    )}
+  </div>
+);
 }
 
 export default App;
+
