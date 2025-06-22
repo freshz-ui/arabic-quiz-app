@@ -1,0 +1,167 @@
+import { useEffect, useState } from 'react';
+import { supabase } from './lib/supabaseClient';
+import Auth from './Auth';
+import Progress from './Progress';
+
+function App() {
+  const [user, setUser] = useState(null);
+  const [question, setQuestion] = useState(null);
+  const [options, setOptions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState('quiz');
+  const [lastQuestionId, setLastQuestionId] = useState(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+  }, []);
+
+  useEffect(() => {
+    if (user && view === 'quiz') fetchQuestion();
+  }, [user, view]);
+
+  const fetchQuestion = async () => {
+    setLoading(true);
+
+    const { data: words, error: wordError } = await supabase
+      .from('english_words')
+      .select('id, "English Meaning", arabic_forms(form_type, form_value)')
+      .limit(100);
+
+    if (wordError || !words) {
+      console.error('Error fetching words:', wordError);
+      setLoading(false);
+      return;
+    }
+
+    const { data: progress, error: progressError } = await supabase
+      .from('user_progress')
+      .select('english_id, ease, correct_count, incorrect_count')
+      .eq('user_id', user.id);
+
+    if (progressError) {
+      console.error('Error fetching progress:', progressError);
+    }
+
+    const progressMap = {};
+    (progress || []).forEach(p => {
+      progressMap[p.english_id] = p;
+    });
+
+    const filtered = words.filter(w => w.arabic_forms?.length > 0);
+    if (!filtered.length) {
+      alert('No vocab data found.');
+      setLoading(false);
+      return;
+    }
+
+    const weighted = filtered.flatMap(word => {
+      const ease = progressMap[word.id]?.ease ?? 1;
+      const weight = 6 - ease;
+      return Array(weight).fill({ ...word, progress: progressMap[word.id] });
+    });
+
+    let question;
+    let attempts = 0;
+    do {
+      question = weighted[Math.floor(Math.random() * weighted.length)];
+      attempts++;
+    } while (question.id === lastQuestionId && attempts < 10);
+    setLastQuestionId(question.id);
+
+    const incorrect = filtered
+      .filter(w => w.id !== question.id)
+      .sort(() => 0.5 - Math.random())
+      .slice(0, 3)
+      .map(w => ({ ...w, progress: progressMap[w.id] }));
+
+    const allOptions = [...incorrect, question].sort(() => 0.5 - Math.random());
+
+    setQuestion(question);
+    setOptions(allOptions);
+    setLoading(false);
+  };
+
+  const handleAnswer = async (selected) => {
+    const isCorrect = selected === question["English Meaning"];
+    alert(isCorrect ? '✅ Correct!' : '❌ Incorrect');
+
+    const currentEase = question.progress?.ease ?? 1;
+    const newEase = isCorrect ? Math.min(currentEase + 1, 5) : 1;
+    const prevCorrect = question.progress?.correct_count ?? 0;
+    const prevIncorrect = question.progress?.incorrect_count ?? 0;
+
+    const { error } = await supabase.from('user_progress').upsert({
+      user_id: user.id,
+      english_id: question.id,
+      ease: newEase,
+      last_seen: new Date().toISOString(),
+      seen: true,
+      correct_count: isCorrect ? prevCorrect + 1 : prevCorrect,
+      incorrect_count: isCorrect ? prevIncorrect : prevIncorrect + 1
+    });
+
+    if (error) {
+      console.error('Error updating progress:', error);
+    }
+
+    fetchQuestion();
+  };
+
+  return (
+    <div style={{ padding: '2rem', fontFamily: 'sans-serif', maxWidth: '700px', margin: 'auto' }}>
+      <h1>Arabic Vocab</h1>
+
+      {!user ? (
+        <Auth onAuth={setUser} />
+      ) : (
+        <>
+          <nav style={{ marginBottom: '1rem' }}>
+            <button onClick={() => setView('quiz')} style={{ marginRight: '1rem' }}>
+              Quiz
+            </button>
+            <button onClick={() => setView('progress')}>Progress</button>
+          </nav>
+
+          {view === 'progress' ? (
+            <Progress user={user} />
+          ) : loading ? (
+            <p>Loading...</p>
+          ) : (
+            <>
+              <h2>What is the meaning of:</h2>
+              <ul style={{ fontSize: '1.25rem', lineHeight: '1.6' }}>
+                {question.arabic_forms.map((form, i) => (
+                  <li key={i}>
+                    <strong>{form.form_type}:</strong> {form.form_value}
+                  </li>
+                ))}
+              </ul>
+
+              <div style={{ marginTop: '1rem' }}>
+                {options.map((opt, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleAnswer(opt["English Meaning"])}
+                    style={{
+                      display: 'block',
+                      margin: '0.5rem 0',
+                      padding: '0.75rem 1rem',
+                      width: '100%',
+                      fontSize: '1rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+
+                    {opt["English Meaning"]}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+export default App;
