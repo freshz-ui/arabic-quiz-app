@@ -19,77 +19,75 @@ function App() {
     if (user && view === 'quiz') fetchQuestion();
   }, [user, view]);
 
-  const fetchQuestion = async () => {
-    setLoading(true);
+const fetchQuestion = async () => {
+  setLoading(true);
 
-    const { data: words, error: wordError } = await supabase
-      .from('english_words')
-      .select('id, "English Meaning", arabic_forms(form_type, form_value)')
-      .limit(100);
+  const { data: words, error: wordError } = await supabase
+    .from('english_words')
+    .select('id, "English Meaning", arabic_forms(form_type, form_value)');
 
-    if (wordError || !words) {
-      console.error('Error fetching words:', wordError);
-      setLoading(false);
-      return;
-    }
-
-    const { data: progress, error: progressError } = await supabase
-      .from('user_progress')
-      .select('english_id, ease, correct_count, incorrect_count')
-      .eq('user_id', user.id);
-
-    if (progressError) {
-      console.error('Error fetching progress:', progressError);
-    }
-
-    const progressMap = {};
-    (progress || []).forEach(p => {
-      progressMap[p.english_id] = p;
-    });
-
-    const filtered = words.filter(w => w.arabic_forms?.length > 0);
-    if (!filtered.length) {
-      alert('No vocab data found.');
-      setLoading(false);
-      return;
-    }
-
-    const unseenWords = filtered.filter(word => !progressMap[word.id]);
-    const seenWords = filtered.filter(word => progressMap[word.id]);
-
-    const weightedSeen = seenWords.flatMap(word => {
-      const ease = progressMap[word.id]?.ease ?? 1;
-      const weight = Math.max(1, 6 - ease); // More incorrect = higher weight
-      return Array(weight).fill({ ...word, progress: progressMap[word.id] });
-    });
-
-    const weightedUnseen = unseenWords.flatMap(word =>
-      Array(15).fill({ ...word, progress: null }) // Unseen words appear more often
-    );
-
-    const fullPool = [...weightedUnseen, ...weightedSeen].sort(() => 0.5 - Math.random());
-
-    let question;
-    let attempts = 0;
-    do {
-      question = fullPool[Math.floor(Math.random() * fullPool.length)];
-      attempts++;
-    } while (question.id === lastQuestionId && attempts < 10);
-    setLastQuestionId(question.id);
-
-
-    const incorrect = filtered
-      .filter(w => w.id !== question.id)
-      .sort(() => 0.5 - Math.random())
-      .slice(0, 3)
-      .map(w => ({ ...w, progress: progressMap[w.id] }));
-
-    const allOptions = [...incorrect, question].sort(() => 0.5 - Math.random());
-
-    setQuestion(question);
-    setOptions(allOptions);
+  if (wordError || !words) {
+    console.error('Error fetching words:', wordError);
     setLoading(false);
-  };
+    return;
+  }
+
+  const { data: progress, error: progressError } = await supabase
+    .from('user_progress')
+    .select('english_id, ease, correct_count, incorrect_count, seen')
+    .eq('user_id', user.id);
+
+  if (progressError) {
+    console.error('Error fetching progress:', progressError);
+  }
+
+  const progressMap = {};
+  (progress || []).forEach(p => {
+    progressMap[p.english_id] = p;
+  });
+
+  const filtered = words.filter(w => w.arabic_forms?.length > 0);
+  if (!filtered.length) {
+    alert('No vocab data found.');
+    setLoading(false);
+    return;
+  }
+
+  const weighted = filtered.flatMap(word => {
+    const progress = progressMap[word.id];
+    let weight;
+
+    if (!progress || progress.seen !== true) {
+      weight = 8; // Unseen words get higher priority
+    } else {
+      const ease = progress.ease ?? 1;
+      weight = Math.max(1, 6 - ease);
+    }
+
+    return Array(weight).fill({ ...word, progress });
+  });
+
+  let question;
+  let attempts = 0;
+  do {
+    question = weighted[Math.floor(Math.random() * weighted.length)];
+    attempts++;
+  } while (question.id === lastQuestionId && attempts < 10);
+  setLastQuestionId(question.id);
+
+  const incorrect = filtered
+    .filter(w => w.id !== question.id)
+    .sort(() => 0.5 - Math.random())
+    .slice(0, 3)
+    .map(w => ({ ...w, progress: progressMap[w.id] }));
+
+  const allOptions = [...incorrect, question].sort(() => 0.5 - Math.random());
+
+  setQuestion(question);
+  setOptions(allOptions);
+  setLoading(false);
+};
+
 
   const handleAnswer = async (selected) => {
     const isCorrect = selected === question["English Meaning"];
