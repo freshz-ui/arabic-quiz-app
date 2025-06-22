@@ -54,30 +54,29 @@ function App() {
       return;
     }
 
-    const weighted = filtered.flatMap(word => {
-      const progress = progressMap[word.id];
-      let weight;
+    const unseenWords = filtered.filter(word => !progressMap[word.id]);
+    const seenWords = filtered.filter(word => progressMap[word.id]);
 
-      if (!progress || progress.seen !== true) {
-        // Unseen word — give highest weight
-        weight = 10;
-      } else {
-        // Seen — weight depends on ease
-        const ease = progress.ease ?? 1;
-        weight = 6 - ease;
-      }
-
-     return Array(weight).fill({ ...word, progress });
+    const weightedSeen = seenWords.flatMap(word => {
+      const ease = progressMap[word.id]?.ease ?? 1;
+      const weight = Math.max(1, 6 - ease); // More incorrect = higher weight
+      return Array(weight).fill({ ...word, progress: progressMap[word.id] });
     });
 
+    const weightedUnseen = unseenWords.flatMap(word =>
+      Array(15).fill({ ...word, progress: null }) // Unseen words appear more often
+    );
+
+    const fullPool = [...weightedUnseen, ...weightedSeen].sort(() => 0.5 - Math.random());
 
     let question;
     let attempts = 0;
     do {
-      question = weighted[Math.floor(Math.random() * weighted.length)];
+      question = fullPool[Math.floor(Math.random() * fullPool.length)];
       attempts++;
     } while (question.id === lastQuestionId && attempts < 10);
     setLastQuestionId(question.id);
+
 
     const incorrect = filtered
       .filter(w => w.id !== question.id)
