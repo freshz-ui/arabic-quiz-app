@@ -58,7 +58,7 @@ const fetchQuestion = async () => {
     let weight;
 
     if (!progress || progress.seen !== true) {
-      weight = 8; // Unseen words get higher priority
+      weight = 4; // Unseen words get higher priority
     } else {
       const ease = progress.ease ?? 1;
       weight = Math.max(1, 6 - ease);
