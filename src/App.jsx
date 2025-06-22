@@ -60,7 +60,7 @@ function App() {
 
       if (!progress || progress.seen !== true) {
         // Unseen word — give highest weight
-        weight = 8;
+        weight = 10;
       } else {
         // Seen — weight depends on ease
         const ease = progress.ease ?? 1;
