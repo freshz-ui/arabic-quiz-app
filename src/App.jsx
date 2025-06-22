@@ -55,10 +55,21 @@ function App() {
     }
 
     const weighted = filtered.flatMap(word => {
-      const ease = progressMap[word.id]?.ease ?? 1;
-      const weight = 6 - ease;
-      return Array(weight).fill({ ...word, progress: progressMap[word.id] });
+      const progress = progressMap[word.id];
+      let weight;
+
+      if (!progress || progress.seen !== true) {
+        // Unseen word — give highest weight
+        weight = 8;
+      } else {
+        // Seen — weight depends on ease
+        const ease = progress.ease ?? 1;
+        weight = 6 - ease;
+      }
+
+     return Array(weight).fill({ ...word, progress });
     });
+
 
     let question;
     let attempts = 0;
@@ -108,7 +119,7 @@ function App() {
   };
 
   return (
-    <div style={{ padding: '2rem', fontFamily: 'sans-serif', maxWidth: '700px', margin: 'auto' }}>
+    <div className="container">
       <h1>Arabic Vocab</h1>
 
       {!user ? (
